@@ -32,6 +32,7 @@ class Assembler():
 
         self.data = None #will be updated during runtime
         self.ins_type_dict = dict()
+        self.la = dict()
 
     @classmethod
     def dec_bin(cls,num,length=0):
@@ -46,9 +47,21 @@ class Assembler():
         return string[::-1]
 
     @classmethod
-    def read_file(cls,filename):
-        with open(filename,'r') as f:
-            data = list(map(lambda x:x.strip(),f.readlines()))
+    def read_file(self, filename):
+        """Reads the file and extracts label addresses."""
+        data = []
+        address = 0
+        with open(filename, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                if re.match(r'^[a-zA-Z]\w*:$', line):  
+                    label = line[:-1]  # Remove colon
+                    self.la[label] = address
+                else:
+                    data.append(line)
+                    address += 4  # Each instruction is 4 bytes
         return data
 
     def find_command(self,data):
@@ -116,31 +129,32 @@ class Assembler():
         except Exception as e:
             print("ERROR FOUND", e, "Invalid Register Name or Immediate")
     
-    def Jtypeins(self, data):
+    def Jtypeins(self, data, address):
         aux_data = re.split(r'[,\s()]+', data.strip())
         command = aux_data[0]
-        rd = aux_data[1]
-        imm = aux_data[2]
-    
+        rd=aux_data[1]
+        imm=aux_data[2]
         other_info = self.riscv_instructions["J-type"][command]
-    
         try:
-            imm_val = int(imm)
-            if imm_val < 0:
-                imm_val = (1 << 20) + imm_val  
+            if imm in self.la:
+                imm_val = self.la[imm] - address  
+            else:
+                imm_val = int(imm)  
     
-            imm_bin = self.dec_bin(imm_val, 20)
+            imm_bin = self.dec_bin(imm_val >> 1, 20)  # Shift right by 1 for word alignment
+  
             imm_final = (
-                imm_bin[0] +  # imm[20]
-                imm_bin[10:20] +  # imm[10:1]
-                imm_bin[9] +  # imm[11]
-                imm_bin[1:9]  # imm[19:12]
+                imm_bin[0] +         # imm[20] (sign bit)
+                imm_bin[10:20] +     # imm[10:1]
+                imm_bin[9] +         # imm[11]
+                imm_bin[1:9]         # imm[19:12]
             )
     
             return f'{imm_final}{self.register_encoding[rd]}{other_info["opcode"]}'
         
         except Exception as e:
-            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+            print(f"ERROR: {e} - Invalid Register Name or Immediate")
+
     
     def Btypeins(self, data):
         aux_data = re.split(r'[,\s()]+', data.strip())
@@ -148,36 +162,37 @@ class Assembler():
         rs1 = aux_data[1]
         rs2 = aux_data[2]
         imm = aux_data[3]
-    
         other_info = self.riscv_instructions["B-type"][command]
-    
         try:
-            imm_val = int(imm)
-            if imm_val < 0:
-                imm_val = (1 << 12) + imm_val  
+        if imm in self.la:
+            imm_val = self.la[imm] - address 
+        else:
+            imm_val = int(imm) 
+
+        imm_bin = self.dec_bin(imm_val >> 1, 12)  
+
+        imm_final = (
+            imm_bin[0] +         # imm[12] (sign bit)
+            imm_bin[2:8] +       # imm[10:5]
+            self.register_encoding[rs2] +
+            self.register_encoding[rs1] +
+            other_info["funct3"] +
+            imm_bin[8:12] +      # imm[4:1]
+            imm_bin[1] +         # imm[11]
+            other_info["opcode"]
+        )
+
+        return imm_final
     
-            imm_bin = self.dec_bin(imm_val, 12)
-            imm_final = (
-                imm_bin[0] +  # imm[12]
-                imm_bin[2:8] +  # imm[10:5]
-                self.register_encoding[rs2] +
-                self.register_encoding[rs1] +
-                other_info["funct3"] +
-                imm_bin[8:12] +  # imm[4:1]
-                imm_bin[1] +  # imm[11]
-                other_info["opcode"]
-            )
-    
-            return imm_final
-        
-        except Exception as e:
-            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
-            
+    except Exception as e:
+        print(f"ERROR: {e} - Invalid Register Name or Immediate")
 
 if __name__ == '__main__':
     assembler = Assembler()
     filename = 'input.asm'  
+    
     assembler.data = assembler.read_file(filename) 
+    address=0
     for line in assembler.data:
         try:
             command,ins_type = assembler.find_command(line)
@@ -185,6 +200,12 @@ if __name__ == '__main__':
                 ans = assembler.Rtypeins(line)
             elif ins_type == "S-type":
                 ans = assembler.Stypeins(line)
+            elif ins_type == "I-type":
+                ans = assembler.Itypeins(line)
+            elif ins_type == "B-type":
+                    ans = self.Btypeins(line, address)
+            elif ins_type == "J-type":
+                    ans = self.Jtypeins(line, address)
             else:
                 print(f"Abhi Likha Nhi: {ins_type}")
                 continue
