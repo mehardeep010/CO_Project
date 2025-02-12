@@ -84,7 +84,7 @@ class Assembler():
         
         try:
             imm_val = int(imm)
-            if imm_val < 0:
+            if (imm_val < 0):
                 imm_val = (1<<12) +imm_val
     
             imm_upper = self.dec_bin((imm_val>>5) & 0x7F, 7)
