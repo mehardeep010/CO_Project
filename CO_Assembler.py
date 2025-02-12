@@ -18,8 +18,12 @@ class Assembler():
                                         "addi": {"opcode": "0010011", "funct3": "000"},
                                         "jalr": {"opcode": "1100111", "funct3": "000"},
                                         "lw": {"opcode": "0000011", "funct3": "010"}},
-                                    "S-type": {
-                                        "sw": {"opcode": "0100011", "funct3": "010"}},
+
+                                    "S-type":{
+                                        "sw": {"opcode": "0100011", "funct3": "010"},
+                                        "sh": {"opcode": "0100011", "funct3": "001"},
+                                        "sb": {"opcode": "0100011", "funct3": "000"}},
+
                                     "B-type": {
                                         "beq": {"opcode": "1100011", "funct3": "000"},
                                         "bne": {"opcode": "1100011", "funct3": "001"}},
@@ -51,7 +55,7 @@ class Assembler():
         '''Takes the data from file and checks for command'''
         command = data.split()[0]
         for ins_type in self.riscv_instructions:
-            if command in riscv_instructions[ins_type].keys():
+            if command in self.riscv_instructions[ins_type].keys():
                 return command,ins_type
         else:
             raise Exception("Invalid Instructions")
@@ -65,13 +69,53 @@ class Assembler():
         command,rd,rs1,rs2 = aux_data 
         other_info = self.riscv_instructions["R-type"][command] #funct7,funct3,opcode
         try:
-            return f'{other_info['funct7']}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info['funct3']}{self.register_encoding[rd]}{other_info['opcode']}'
+            return f'{other_info["funct7"]}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info["funct3"]}{self.register_encoding[rd]}{other_info["opcode"]}'
         except Exception as e:
             print("ERROR FOUND",e,"Invalid Register Name")
+    
+    def Stypeins(self, data):
+        aux_data = re.split(r'[,\s()]+', data.strip())
+        command = aux_data[0]
+        rs2 = aux_data[1]
+        imm = aux_data[2]
+        rs1 = aux_data[3]
+        
+        other_info = self.riscv_instructions["S-type"][command]
+        
+        try:
+            imm_val = int(imm)
+            if imm_val < 0:
+                imm_val = (1<<12) +imm_val
+    
+            imm_upper = self.dec_bin((imm_val>>5) & 0x7F, 7)
+            imm_lower = self.dec_bin(imm_val & 0x1F,5)
+            
+            return f'{imm_upper}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info["funct3"]}{imm_lower}{other_info["opcode"]}'
+            
+        except Exception as e:
+            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+        
 
 if __name__ == '__main__':
     assembler = Assembler()
-    filename = 'input.asm'
-    assembler.data = Assembler().read_file(filename)
-    for i in data:
-        command,ins_type = assembler.find_command(data)
+    filename = 'input.asm'  
+    assembler.data = assembler.read_file(filename) 
+    for line in assembler.data:
+        try:
+            command,ins_type = assembler.find_command(line)
+            if ins_type == "R-type":
+                ans = assembler.Rtypeins(line)
+            elif ins_type == "S-type":
+                ans = assembler.Stypeins(line)
+            else:
+                print(f"Abhi Likha Nhi: {ins_type}")
+                continue
+            print(f"{ans}")
+        except Exception as e:
+            print(f"Error '{line}': {e}")
+
+
+
+
+
+
