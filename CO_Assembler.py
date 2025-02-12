@@ -94,7 +94,85 @@ class Assembler():
             
         except Exception as e:
             print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+
+    def Itypeins(self, data):
+        aux_data = re.split(r'[,\s()]+', data.strip())
+        command = aux_data[0]
+        rd = aux_data[1]
+        rs1 = aux_data[2]
+        imm = aux_data[3]
+    
+        other_info = self.riscv_instructions["I-type"][command]
+    
+        try:
+            imm_val = int(imm)
+            if imm_val < 0:
+                imm_val = (1 << 12) + imm_val 
+    
+            imm_bin = self.dec_bin(imm_val, 12)
+    
+            return f'{imm_bin}{self.register_encoding[rs1]}{other_info["funct3"]}{self.register_encoding[rd]}{other_info["opcode"]}'
         
+        except Exception as e:
+            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+    
+    def Jtypeins(self, data):
+        aux_data = re.split(r'[,\s()]+', data.strip())
+        command = aux_data[0]
+        rd = aux_data[1]
+        imm = aux_data[2]
+    
+        other_info = self.riscv_instructions["J-type"][command]
+    
+        try:
+            imm_val = int(imm)
+            if imm_val < 0:
+                imm_val = (1 << 20) + imm_val  
+    
+            imm_bin = self.dec_bin(imm_val, 20)
+            imm_final = (
+                imm_bin[0] +  # imm[20]
+                imm_bin[10:20] +  # imm[10:1]
+                imm_bin[9] +  # imm[11]
+                imm_bin[1:9]  # imm[19:12]
+            )
+    
+            return f'{imm_final}{self.register_encoding[rd]}{other_info["opcode"]}'
+        
+        except Exception as e:
+            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+    
+    def Btypeins(self, data):
+        aux_data = re.split(r'[,\s()]+', data.strip())
+        command = aux_data[0]
+        rs1 = aux_data[1]
+        rs2 = aux_data[2]
+        imm = aux_data[3]
+    
+        other_info = self.riscv_instructions["B-type"][command]
+    
+        try:
+            imm_val = int(imm)
+            if imm_val < 0:
+                imm_val = (1 << 12) + imm_val  
+    
+            imm_bin = self.dec_bin(imm_val, 12)
+            imm_final = (
+                imm_bin[0] +  # imm[12]
+                imm_bin[2:8] +  # imm[10:5]
+                self.register_encoding[rs2] +
+                self.register_encoding[rs1] +
+                other_info["funct3"] +
+                imm_bin[8:12] +  # imm[4:1]
+                imm_bin[1] +  # imm[11]
+                other_info["opcode"]
+            )
+    
+            return imm_final
+        
+        except Exception as e:
+            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+            
 
 if __name__ == '__main__':
     assembler = Assembler()
