@@ -172,6 +172,25 @@ class Assembler():
         
         except Exception as e:
             print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+
+    def Utypeins(self , data):
+        aux_data = re.split(r'[,\s()]+' , data.strip())
+        command = aux_data[0]
+        rd = aux_data[1]
+        imm = aux_data[2]
+
+        other_info = self.riscv_instructions["U-type"][command]
+
+        try:
+            imm_val = int(imm)
+            if imm_val < 0 :
+                imm_val = (1 << 20) + imm_val
+
+            imm_bin = self.dec_bin(imm_val , 20)
+
+            return f'{imm_bin}{self. register_encoding[rd]}{other_info["opcode"]}'
+        except Exception as e:
+            print("ERROR FOUND" , e , "Invalid Register Name or Immediate")
             
 
 if __name__ == '__main__':
