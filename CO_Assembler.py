@@ -164,28 +164,28 @@ class Assembler():
         imm = aux_data[3]
         other_info = self.riscv_instructions["B-type"][command]
         try:
-        if imm in self.la:
-            imm_val = self.la[imm] - address 
-        else:
-            imm_val = int(imm) 
-
-        imm_bin = self.dec_bin(imm_val >> 1, 12)  
-
-        imm_final = (
-            imm_bin[0] +         # imm[12] (sign bit)
-            imm_bin[2:8] +       # imm[10:5]
-            self.register_encoding[rs2] +
-            self.register_encoding[rs1] +
-            other_info["funct3"] +
-            imm_bin[8:12] +      # imm[4:1]
-            imm_bin[1] +         # imm[11]
-            other_info["opcode"]
-        )
-
-        return imm_final
+            if imm in self.la:
+                imm_val = self.la[imm] - address 
+            else:
+                imm_val = int(imm) 
     
-    except Exception as e:
-        print(f"ERROR: {e} - Invalid Register Name or Immediate")
+            imm_bin = self.dec_bin(imm_val >> 1, 12)  
+    
+            imm_final = (
+                imm_bin[0] +         # imm[12] (sign bit)
+                imm_bin[2:8] +       # imm[10:5]
+                self.register_encoding[rs2] +
+                self.register_encoding[rs1] +
+                other_info["funct3"] +
+                imm_bin[8:12] +      # imm[4:1]
+                imm_bin[1] +         # imm[11]
+                other_info["opcode"]
+            )
+    
+            return imm_final
+        
+        except Exception as e:
+            print(f"ERROR: {e} - Invalid Register Name or Immediate")
 
 if __name__ == '__main__':
     assembler = Assembler()
