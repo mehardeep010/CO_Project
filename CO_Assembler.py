@@ -1,3 +1,4 @@
+
 import re
 
 class Assembler():
@@ -34,17 +35,32 @@ class Assembler():
         self.ins_type_dict = dict()
         self.la = dict()
 
+
     @classmethod
     def dec_bin(cls,num,length=0):
-        '''returns a binary representation of the decimal number in string format (in unsigned representation)'''
+        '''returns a binary representation of the decimal number in string format (in 2 complement representation)'''
         string = ''
+        msb = '0' if num >= 0 else '1'
+        length -= 1
+        num = abs(num)
         while num!=0:
             bit = num&1
             string += str(bit)
             num >>= 1
         if length != 0:
             string += '0'*(length-len(string))
-        return string[::-1]
+        string = string[::-1]
+        if msb == '1':
+            newstring = ''
+            first = False
+            for i in range(length-1,-1,-1): #length -1 to 0
+                if not first:
+                    newstring += string[i]
+                    first = True if string[i] == '1' else False
+                else:
+                    newstring += '1' if string[i] == '0' else '0'                
+            string = newstring[::-1]
+        return msb + string
 
     @classmethod
     def read_file(self, filename):
@@ -54,19 +70,38 @@ class Assembler():
         with open(filename, 'r') as f:
             for line in f:
                 line = line.strip()
-                if not line:
+                if not line: #Empty line fixed
                     continue
-                if re.match(r'^[a-zA-Z]\w*:$', line):  
+                if line.endswith(':'):  
                     label = line[:-1]  # Remove colon
                     self.la[label] = address
                 else:
                     data.append(line)
                     address += 4  # Each instruction is 4 bytes
         return data
+    def parse_labels(self, data):
+        label_count = {}
+        for line in data:
+            parts = line.split(':')
+            if len(parts) > 2:
+                raise Exception("Multiple labels found in a single line")
+            if len(parts) == 2:
+                label = parts[0].strip()
+                if label in label_count:
+                    raise Exception(f"Duplicate label found: {label}")
+                label_count[label] = True
+
+    def find_labels(self, data):
+        for line in data:
+            if ':' in line:
+                label = line.split(':')[0].strip()
+                if label in self.la:
+                    raise Exception(f"Duplicate label: {label}")
+                self.la[label] = None  # Placeholder until address is assigned
 
     def find_command(self,data):
         '''Takes the data from file and checks for command'''
-        command = data.split()[0]
+        command = re.split(r'[\s,]+', data.strip())[0]
         for ins_type in self.riscv_instructions:
             if command in self.riscv_instructions[ins_type].keys():
                 return command,ins_type
@@ -156,7 +191,7 @@ class Assembler():
             print(f"ERROR: {e} - Invalid Register Name or Immediate")
 
     
-    def Btypeins(self, data):
+    def Btypeins(self, data,address):
         aux_data = re.split(r'[,\s()]+', data.strip())
         command = aux_data[0]
         rs1 = aux_data[1]
@@ -189,32 +224,29 @@ class Assembler():
 
 if __name__ == '__main__':
     assembler = Assembler()
-    filename = 'input.asm'  
-    
-    assembler.data = assembler.read_file(filename) 
-    address=0
-    for line in assembler.data:
-        try:
-            command,ins_type = assembler.find_command(line)
-            if ins_type == "R-type":
-                ans = assembler.Rtypeins(line)
-            elif ins_type == "S-type":
-                ans = assembler.Stypeins(line)
-            elif ins_type == "I-type":
-                ans = assembler.Itypeins(line)
-            elif ins_type == "B-type":
-                    ans = self.Btypeins(line, address)
-            elif ins_type == "J-type":
-                    ans = self.Jtypeins(line, address)
-            else:
-                print(f"Abhi Likha Nhi: {ins_type}")
-                continue
-            print(f"{ans}")
-        except Exception as e:
-            print(f"Error '{line}': {e}")
+    filename = 'input.asm'
+    output_file = 'output.txt'
+    assembler.data = assembler.read_file(filename)
+    assembler.parse_labels(assembler.data)
+    assembler.find_labels(assembler.data)
 
-
-
-
-
-
+    with open(output_file, 'w') as out:
+        for address, line in enumerate(assembler.data):
+            try:
+                command, ins_type = assembler.find_command(line)
+                if ins_type == "R-type":
+                    ans = assembler.Rtypeins(line)
+                elif ins_type == "S-type":
+                    ans = assembler.Stypeins(line)
+                elif ins_type == "I-type":
+                    ans = assembler.Itypeins(line)
+                elif ins_type == "B-type":
+                    ans = assembler.Btypeins(line, address * 4)
+                elif ins_type == "J-type":
+                    ans = assembler.Jtypeins(line, address * 4)
+                if command == "beq" and "zero,zero,0x00000000" in line:
+                    out.write("Virtual Halt encountered. Stopping execution.\n")
+                    break
+                out.write(ans + '\n')
+            except Exception as e:
+                out.write(f"Error in line '{line}': {e}\n")
