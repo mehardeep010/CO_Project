@@ -2,6 +2,7 @@
 import re
 
 class Assembler():
+    pc_multiplier = 4
     def __init__(self):
         self.register_encoding = {'zero':'00000','ra':'00001','sp':'00010','gp':'00011','tp':'00100','t0':'00101','t1':'00110','t2':'00111','s0':'01000','fp':'01000','s1':'01001','a0':'01010',
         'a1':'01011','a2': '01100', 'a3': '01101', 'a4': '01110', 'a5': '01111', 'a6': '10000', 'a7': '10001'
@@ -33,8 +34,8 @@ class Assembler():
 
         self.data = None #will be updated during runtime
         self.ins_type_dict = dict()
-        self.la = dict()
-
+        self.pc_multiplier = 4
+        self.la = dict() #label:address key value pair
 
     @classmethod
     def dec_bin(cls,num,length=0):
@@ -62,42 +63,27 @@ class Assembler():
             string = newstring[::-1]
         return msb + string
 
-    @classmethod
     def read_file(self, filename):
         """Reads the file and extracts label addresses."""
-        data = []
-        address = 0
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line: #Empty line fixed
-                    continue
-                if line.endswith(':'):  
-                    label = line[:-1]  # Remove colon
-                    self.la[label] = address
+        with open(filename,'r') as f:
+            data = list(map(lambda x:x.strip(),f.readlines()))
+        data = [x for x in data if x]
+        tempdata = [z for z in data]
+        for index,i in enumerate(tempdata):
+            if ':' in i:
+                labelname,instruction = i.split(':')
+                data[index] = instruction
+                if labelname not in self.la:
+                    self.la[labelname] = self.pc_multiplier*index
                 else:
-                    data.append(line)
-                    address += 4  # Each instruction is 4 bytes
-        return data
+                    raise Exception(f"Same label defined twice! at PC address {self.la[labelname]}")
+        return data #only the set of instructions, label extracted out
+
     def parse_labels(self, data):
-        label_count = {}
         for line in data:
             parts = line.split(':')
             if len(parts) > 2:
-                raise Exception("Multiple labels found in a single line")
-            if len(parts) == 2:
-                label = parts[0].strip()
-                if label in label_count:
-                    raise Exception(f"Duplicate label found: {label}")
-                label_count[label] = True
-
-    def find_labels(self, data):
-        for line in data:
-            if ':' in line:
-                label = line.split(':')[0].strip()
-                if label in self.la:
-                    raise Exception(f"Duplicate label: {label}")
-                self.la[label] = None  # Placeholder until address is assigned
+                raise Exception("Multiple labels found in a single line or syntax error involving ':'")
 
     def find_command(self,data):
         '''Takes the data from file and checks for command'''
@@ -106,7 +92,7 @@ class Assembler():
             if command in self.riscv_instructions[ins_type].keys():
                 return command,ins_type
         else:
-            raise Exception("Invalid Instructions")
+            raise Exception("Invalid Instructions or invalid label")
     
     def update_dict(self):
         '''Maps each of the instruction types to their implementation in this class'''
@@ -114,6 +100,7 @@ class Assembler():
 
     def Rtypeins(self,data):
         aux_data = re.split(r'[,\s]+',data)
+        aux_data = [i for i in aux_data if i]
         command,rd,rs1,rs2 = aux_data 
         other_info = self.riscv_instructions["R-type"][command] #funct7,funct3,opcode
         try:
@@ -166,9 +153,9 @@ class Assembler():
     
     def Jtypeins(self, data, address):
         aux_data = re.split(r'[,\s()]+', data.strip())
-        command = aux_data[0]
-        rd=aux_data[1]
-        imm=aux_data[2]
+        command = aux_data[0].strip()
+        rd=aux_data[1].strip()
+        imm=aux_data[2].strip()
         other_info = self.riscv_instructions["J-type"][command]
         try:
             if imm in self.la:
@@ -228,7 +215,6 @@ if __name__ == '__main__':
     output_file = 'output.txt'
     assembler.data = assembler.read_file(filename)
     assembler.parse_labels(assembler.data)
-    assembler.find_labels(assembler.data)
 
     with open(output_file, 'w') as out:
         for address, line in enumerate(assembler.data):
@@ -241,9 +227,9 @@ if __name__ == '__main__':
                 elif ins_type == "I-type":
                     ans = assembler.Itypeins(line)
                 elif ins_type == "B-type":
-                    ans = assembler.Btypeins(line, address * 4)
+                    ans = assembler.Btypeins(line, address * Assembler.pc_multiplier)
                 elif ins_type == "J-type":
-                    ans = assembler.Jtypeins(line, address * 4)
+                    ans = assembler.Jtypeins(line, address * Assembler.pc_multiplier)
                 if command == "beq" and "zero,zero,0x00000000" in line:
                     out.write("Virtual Halt encountered. Stopping execution.\n")
                     break
