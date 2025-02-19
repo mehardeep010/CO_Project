@@ -118,38 +118,41 @@ class Assembler():
         other_info = self.riscv_instructions["S-type"][command]
         
         try:
+            # Fix: Remove any leading zeros or non-numeric characters
+            imm = imm.lstrip('0') if imm.lstrip('0') else '0'
             imm_val = int(imm)
-            if (imm_val < 0):
-                imm_val = (1<<12) +imm_val
-    
-            imm_upper = self.dec_bin((imm_val>>5) & 0x7F, 7)
-            imm_lower = self.dec_bin(imm_val & 0x1F,5)
-            
+
+            imm_upper = self.dec_bin((imm_val >> 5) & 0x3F, 7)
+            imm_lower = self.dec_bin(imm_val & 0x1F, 5)[-5:]
+
             return f'{imm_upper}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info["funct3"]}{imm_lower}{other_info["opcode"]}'
-            
         except Exception as e:
             print("ERROR FOUND", e, "Invalid Register Name or Immediate")
 
     def Itypeins(self, data):
-        aux_data = re.split(r'[,\s()]+', data.strip())
+        aux_data = re.split(r'[\s,()]+', data.strip())
+
         command = aux_data[0]
         rd = aux_data[1]
-        rs1 = aux_data[2]
-        imm = aux_data[3]
-    
+
+        # Load instructions have offset(rs1) format
+        if command in ["lw"]:
+            imm = aux_data[2]  # Immediate (offset)
+            rs1 = aux_data[3]  # Base register
+        else:
+            rs1 = aux_data[2]
+            imm = aux_data[3]
+
         other_info = self.riscv_instructions["I-type"][command]
-    
+
         try:
-            imm_val = int(imm)
-            if imm_val < 0:
-                imm_val = (1 << 12) + imm_val 
-    
+            imm_val = int(imm,0) if imm.startswith(('0x','0b')) else int(imm)
             imm_bin = self.dec_bin(imm_val, 12)
-    
+
             return f'{imm_bin}{self.register_encoding[rs1]}{other_info["funct3"]}{self.register_encoding[rd]}{other_info["opcode"]}'
-        
         except Exception as e:
-            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+            raise Exception(f"Invalid I-type instruction parameters: {e}")
+
     
     def Jtypeins(self, data, address):
         aux_data = re.split(r'[,\s()]+', data.strip())
