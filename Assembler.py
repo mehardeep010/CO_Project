@@ -1,5 +1,4 @@
-
-import re
+import re,sys
 
 class Assembler():
     pc_multiplier = 4
@@ -8,7 +7,9 @@ class Assembler():
         'a1':'01011','a2': '01100', 'a3': '01101', 'a4': '01110', 'a5': '01111', 'a6': '10000', 'a7': '10001'
         ,'s2': '10010', 's3': '10011', 's4': '10100', 's5': '10101', 's6': '10110', 's7': '10111', 's8': '11000', 's9': '11001', 's10': '11010', 's11': '11011',
          't3': '11100','t4': '11101','t5': '11110','t6': '11111'}
-
+        self.errorcame = False
+        self.inp_file = None
+        self.out_file = None
         self.riscv_instructions = {"R-type": {
                                         "add": {"opcode": "0110011", "funct3": "000", "funct7": "0000000"},
                                         "sub": {"opcode": "0110011", "funct3": "000", "funct7": "0100000"},
@@ -83,6 +84,8 @@ class Assembler():
         for line in data:
             parts = line.split(':')
             if len(parts) > 2:
+                with open(self.out_file,'w') as f:
+                    f.write('')
                 raise Exception("Multiple labels found in a single line or syntax error involving ':'")
 
     def find_command(self,data):
@@ -92,6 +95,8 @@ class Assembler():
             if command in self.riscv_instructions[ins_type].keys():
                 return command,ins_type
         else:
+            with open(self.out_file,'w') as f:
+                f.write('')
             raise Exception("Invalid Instructions or invalid label")
     
     def update_dict(self):
@@ -106,6 +111,8 @@ class Assembler():
         try:
             return f'{other_info["funct7"]}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info["funct3"]}{self.register_encoding[rd]}{other_info["opcode"]}'
         except Exception as e:
+            with open(self.out_file,'w') as f:
+                f.write('')
             print("ERROR FOUND",e,"Invalid Register Name")
     
     def Stypeins(self, data):
@@ -118,38 +125,45 @@ class Assembler():
         other_info = self.riscv_instructions["S-type"][command]
         
         try:
-            imm_val = int(imm)
-            if (imm_val < 0):
-                imm_val = (1<<12) +imm_val
-    
-            imm_upper = self.dec_bin((imm_val>>5) & 0x7F, 7)
-            imm_lower = self.dec_bin(imm_val & 0x1F,5)
-            
+            # Fix: Remove any leading zeros or non-numeric characters
+            imm = imm.lstrip('0') if imm.lstrip('0') else '0'
+            imm_val = self.dec_bin(int(imm),12)
+            imm_upper = imm_val[0:-5].strip()
+            imm_lower = imm_val[-5:].strip()
+
+
             return f'{imm_upper}{self.register_encoding[rs2]}{self.register_encoding[rs1]}{other_info["funct3"]}{imm_lower}{other_info["opcode"]}'
-            
         except Exception as e:
+            with open(self.out_file,'w') as f:
+                f.write('')
             print("ERROR FOUND", e, "Invalid Register Name or Immediate")
 
     def Itypeins(self, data):
-        aux_data = re.split(r'[,\s()]+', data.strip())
+        aux_data = re.split(r'[\s,()]+', data.strip())
+
         command = aux_data[0]
         rd = aux_data[1]
-        rs1 = aux_data[2]
-        imm = aux_data[3]
-    
+
+        # Load instructions have offset(rs1) format
+        if command in ["lw"]:
+            imm = aux_data[2]  # Immediate (offset)
+            rs1 = aux_data[3]  # Base register
+        else:
+            rs1 = aux_data[2]
+            imm = aux_data[3]
+
         other_info = self.riscv_instructions["I-type"][command]
-    
+
         try:
-            imm_val = int(imm)
-            if imm_val < 0:
-                imm_val = (1 << 12) + imm_val 
-    
+            imm_val = int(imm,0) if imm.startswith(('0x','0b')) else int(imm)
             imm_bin = self.dec_bin(imm_val, 12)
-    
+
             return f'{imm_bin}{self.register_encoding[rs1]}{other_info["funct3"]}{self.register_encoding[rd]}{other_info["opcode"]}'
-        
         except Exception as e:
-            print("ERROR FOUND", e, "Invalid Register Name or Immediate")
+            with open(self.out_file,'w') as f:
+                f.write('')
+            raise Exception(f"Invalid I-type instruction parameters: {e}")
+
     
     def Jtypeins(self, data, address):
         aux_data = re.split(r'[,\s()]+', data.strip())
@@ -175,6 +189,8 @@ class Assembler():
             return f'{imm_final}{self.register_encoding[rd]}{other_info["opcode"]}'
         
         except Exception as e:
+            with open(self.out_file,'w') as f:
+                f.write('')
             print(f"ERROR: {e} - Invalid Register Name or Immediate")
 
     
@@ -207,18 +223,26 @@ class Assembler():
             return imm_final
         
         except Exception as e:
+            with open(self.out_file,'w') as f:
+                f.write('')
             print(f"ERROR: {e} - Invalid Register Name or Immediate")
 
 if __name__ == '__main__':
+    if len(sys.argv) != 3:
+        sys.exit("Usage: python pagerank.py corpus")
+    filename = sys.argv[1]
+    output_file = sys.argv[2]
     assembler = Assembler()
-    filename = 'input.asm'
-    output_file = 'output.txt'
+    assembler.inp_file = filename
+    assembler.out_file = output_file
     assembler.data = assembler.read_file(filename)
     assembler.parse_labels(assembler.data)
+    errordone = False
 
     with open(output_file, 'w') as out:
         for address, line in enumerate(assembler.data):
             try:
+                eachpart = re.split(r'[,\s]+',line)              
                 command, ins_type = assembler.find_command(line)
                 if ins_type == "R-type":
                     ans = assembler.Rtypeins(line)
@@ -230,9 +254,24 @@ if __name__ == '__main__':
                     ans = assembler.Btypeins(line, address * Assembler.pc_multiplier)
                 elif ins_type == "J-type":
                     ans = assembler.Jtypeins(line, address * Assembler.pc_multiplier)
-                if command == "beq" and "zero,zero,0x00000000" in line:
-                    out.write("Virtual Halt encountered. Stopping execution.\n")
-                    break
+                # if command == "beq" and len(eachpart) == 4 and eachpart[1].strip() == 'zero' and eachpart[2].strip() == 'zero' and eval(eachpart[3]) == 0 and address != len(assembler.data)-1:
+                #     errordone = True
+                #     print("Virtual Halt encountered. Stopping execution.\n")
+                #     break
+                if address == len(assembler.data) - 1:
+                    if command == "beq" and len(eachpart) == 4 and eachpart[1].strip() == 'zero' and eachpart[2].strip() == 'zero' and eval(eachpart[3]) == 0:
+                        pass
+                    else:
+                        errordone = True
+                        print('Missing virtual Halt')
+                        break
                 out.write(ans + '\n')
             except Exception as e:
-                out.write(f"Error in line '{line}': {e}\n")
+                with open(output_file,'w') as f:
+                    f.write('')
+                raise Exception(f"Error in line '{line}': {e}\n")
+    if errordone:
+        with open(output_file,'w') as f:
+            f.write('')
+        
+
